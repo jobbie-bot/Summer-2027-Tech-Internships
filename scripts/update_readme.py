@@ -32,6 +32,9 @@ REPO_URL = "https://github.com/jobbie-bot/Summer-2027-Tech-Internships"
 USER_AGENT = f"jobbie-internships-readme/1.0 (+{REPO_URL})"
 JOBBIE_URL_PREFIX = "https://jobbie.bot/"
 TIMEOUT_SECONDS = 30
+# Bump whenever the filter or the rendered layout changes, so the next run
+# re-renders even if the feed's ETag has not moved.
+RENDER_VERSION = "2"
 
 # The feed lists every US internship Jobbie can apply to; this README is the
 # tech slice of it. A title that names a technical discipline outright
@@ -48,7 +51,8 @@ STRONG_TECH = re.compile(
     r"information technology|information systems|network|robotic|autonom|computer|"
     r"electrical|electronic|mechatronic|controls|signal|\brf\b|wireless|database|sql|python|java|"
     r"test engineer|validation engineer|verification|sales engineer|technical program|\btpm\b|"
-    r"game dev|research scientist|statistic|simulation|\bgis\b",
+    r"game dev|research scientist|statistic|simulation|\bgis\b|compiler|perception|desktop support|"
+    r"web design|tableau|product manag|product design",
     re.I,
 )
 TECH_HINT = re.compile(
@@ -216,7 +220,11 @@ def main(argv: list[str]) -> int:
         with open(args.fixture, encoding="utf-8") as fh:
             body = fh.read().encode("utf-8")
     else:
-        stored_etag = (read_text(args.etag_file) or "").strip() or None
+        # The stored ETag is only worth sending when it came from this version
+        # of the renderer: a filter or layout change must re-render even an
+        # unchanged feed, so the file carries the version it was written by.
+        stored = (read_text(args.etag_file) or "").strip().split(" ", 1)
+        stored_etag = stored[1] if len(stored) == 2 and stored[0] == RENDER_VERSION else None
         try:
             status, body, new_etag = fetch(args.url, stored_etag)
         except (urllib.error.URLError, OSError, TimeoutError) as err:
@@ -249,7 +257,7 @@ def main(argv: list[str]) -> int:
         write_text(args.readme, text)
         log(f"wrote {args.readme}: {len(jobs)} postings")
     if new_etag:
-        write_text(args.etag_file, new_etag.strip() + "\n")
+        write_text(args.etag_file, RENDER_VERSION + " " + new_etag.strip() + "\n")
     return 0
 
 
