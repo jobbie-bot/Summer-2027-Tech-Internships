@@ -34,7 +34,7 @@ JOBBIE_URL_PREFIX = "https://jobbie.bot/"
 TIMEOUT_SECONDS = 30
 # Bump whenever the filter or the rendered layout changes, so the next run
 # re-renders even if the feed's ETag has not moved.
-RENDER_VERSION = "3"
+RENDER_VERSION = "4"
 
 # The feed lists every US internship Jobbie can apply to; this README is the
 # tech slice of it. A title that names a technical discipline outright
@@ -195,6 +195,9 @@ def render(payload: dict, jobs: list[dict], feed_url: str) -> str:
     rows = []
     for job in jobs:
         salary = str(job.get("salary", "")).strip()
+        # Only a stated figure is worth a column inch; "see description" is not.
+        if not any(ch.isdigit() for ch in salary):
+            salary = ""
         role = f"[{escape_cell(job['title'])}]({job['_job_url']})"
         if salary:
             role += f" · {escape_cell(salary)}"
