@@ -1,0 +1,36 @@
+name: Refresh internships list
+
+on:
+  schedule:
+    # Every 6 hours at :23 past, off the top-of-the-hour rush.
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-readme
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the feed and rebuild README.md
+        run: python3 -I scripts/update_readme.py
+
+      - name: Commit when something changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md .cache/etag
+          if git diff --quiet --cached; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git commit -m "Refresh internships list"
+          git push

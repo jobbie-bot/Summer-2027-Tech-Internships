@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Rebuild README.md from Jobbie's public internships feed.
+
+Standard library only. Designed to be run by a scheduled GitHub Action:
+
+* fetches https://api.jobbie.bot/public/internships.json with a descriptive
+  User-Agent and, when a previous ETag is on disk, an If-None-Match header;
+* on 304 Not Modified, a network error, a non-200 status, a malformed body or
+  an empty list, it prints why and exits 0 WITHOUT touching README.md, so an
+  upstream hiccup never fails the workflow or blanks the list;
+* otherwise it renders the table and writes README.md only when the rendered
+  text actually differs from what is on disk, and stores the new ETag.
+
+Run it against a local fixture to check the rendering without the network:
+
+    python3 -I scripts/update_readme.py --from fixtures/sample.json --readme /tmp/README.md
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+DEFAULT_URL = "https://api.jobbie.bot/public/internships.json"
+REPO_URL = "https://github.com/jobbie-bot/Summer-2027-Tech-Internships"
+USER_AGENT = f"jobbie-internships-readme/1.0 (+{REPO_URL})"
+JOBBIE_URL_PREFIX = "https://jobbie.bot/"
+TIMEOUT_SECONDS = 30
+
+HEADER = """# Summer 2027 & Fall 2026 Tech Internships
+
+An automatically refreshed list of **US tech internships and co-ops**, newest first,
+powered by [Jobbie](https://jobbie.bot).
+
+Jobbie is an AI job-search agent: tell it the roles you want and it finds matching
+postings, tailors your resume to each one and submits the application for you on the
+employer's own careers site (Greenhouse, Lever, Workday, Ashby, Workable and more).
+Every **Apply with Jobbie** link below opens that posting on jobbie.bot, where you can
+read the full description and have Jobbie apply.
+
+- Refreshes every 6 hours from Jobbie's public API; nothing here is hand-edited.
+- Only postings Jobbie can apply to are listed, so every link is live.
+- Spotted a problem with a row? Open an issue and include the link.
+
+"""
+
+FOOTER = """
+---
+
+Last refreshed: **{refreshed}** · {count} postings · Source: [Jobbie](https://jobbie.bot)
+
+Want this data for your own project? The feed is public: `{url}`
+(JSON, cached for 10 minutes, supports `ETag` / `If-None-Match`, rate-limited to
+30 requests per minute per IP, please send a descriptive `User-Agent`).
+"""
+
+TABLE_HEAD = "| Company | Role | Location | Posted | Apply |\n|---|---|---|---|---|\n"
+
+
+def log(msg: str) -> None:
+    print(msg, file=sys.stderr)
+
+
+def fetch(url: str, etag: str | None) -> tuple[int, bytes, str | None]:
+    """GET the feed. Returns (status, body, etag). Raises on transport errors."""
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    if etag:
+        headers["If-None-Match"] = etag
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+            return resp.status, resp.read(), resp.headers.get("ETag")
+    except urllib.error.HTTPError as err:
+        # 304 is the happy "nothing changed" path; anything else is reported
+        # by the caller as a skipped refresh.
+        return err.code, b"", err.headers.get("ETag") if err.headers else None
+
+
+def escape_cell(text: str) -> str:
+    """Make arbitrary text safe inside a Markdown table cell."""
+    text = " ".join(str(text or "").split())  # collapse whitespace/newlines
+    return text.replace("\\", "\\\\").replace("|", "\\|").replace("[", "\\[").replace("]", "\\]")
+
+
+def posted_date(value: str) -> str:
+    try:
+        return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00")).date().isoformat()
+    except (TypeError, ValueError):
+        return ""
+
+
+def clean_jobs(payload: dict) -> list[dict]:
+    """Keep only well-formed rows that link to jobbie.bot."""
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        raise ValueError("payload has no 'jobs' list")
+    out = []
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        url = str(job.get("url", "")).strip()
+        title = str(job.get("title", "")).strip()
+        company = str(job.get("company", "")).strip()
+        if not (url.startswith(JOBBIE_URL_PREFIX) and title and company):
+            continue
+        out.append(job)
+    return out
+
+
+def render(payload: dict, jobs: list[dict], feed_url: str) -> str:
+    rows = []
+    for job in jobs:
+        salary = str(job.get("salary", "")).strip()
+        role = escape_cell(job["title"])
+        if salary:
+            role += f" · {escape_cell(salary)}"
+        rows.append(
+            "| {company} | {role} | {location} | {posted} | [Apply with Jobbie]({url}) |".format(
+                company=escape_cell(job["company"]),
+                role=role,
+                location=escape_cell(job.get("location", "")) or "—",
+                posted=posted_date(job.get("posted_at", "")) or "—",
+                url=job["url"].strip(),
+            )
+        )
+    refreshed = payload.get("generated_at") or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return HEADER + TABLE_HEAD + "\n".join(rows) + "\n" + FOOTER.format(
+        refreshed=refreshed, count=len(jobs), url=feed_url
+    )
+
+
+def read_text(path: str) -> str | None:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def write_text(path: str, text: str) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--url", default=DEFAULT_URL, help="feed URL (default: %(default)s)")
+    ap.add_argument("--from", dest="fixture", help="read the payload from this JSON file instead of the network")
+    ap.add_argument("--readme", default="README.md", help="file to (re)write (default: %(default)s)")
+    ap.add_argument("--etag-file", default=".cache/etag", help="where the last ETag is stored (default: %(default)s)")
+    ap.add_argument("--allow-empty", action="store_true", help="write the README even when the feed lists zero jobs")
+    args = ap.parse_args(argv)
+
+    new_etag = None
+    if args.fixture:
+        with open(args.fixture, encoding="utf-8") as fh:
+            body = fh.read().encode("utf-8")
+    else:
+        stored_etag = (read_text(args.etag_file) or "").strip() or None
+        try:
+            status, body, new_etag = fetch(args.url, stored_etag)
+        except (urllib.error.URLError, OSError, TimeoutError) as err:
+            log(f"skip: could not reach {args.url}: {err}")
+            return 0
+        if status == 304:
+            log("skip: feed unchanged (304 Not Modified)")
+            return 0
+        if status != 200:
+            log(f"skip: feed answered HTTP {status}")
+            return 0
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("payload is not a JSON object")
+        jobs = clean_jobs(payload)
+    except (ValueError, UnicodeDecodeError) as err:
+        log(f"skip: feed body is malformed: {err}")
+        return 0
+
+    if not jobs and not args.allow_empty:
+        log("skip: feed listed no usable jobs; keeping the current README")
+        return 0
+
+    text = render(payload, jobs, args.url)
+    if read_text(args.readme) == text:
+        log(f"no change: {len(jobs)} postings, README already current")
+    else:
+        write_text(args.readme, text)
+        log(f"wrote {args.readme}: {len(jobs)} postings")
+    if new_etag:
+        write_text(args.etag_file, new_etag.strip() + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
