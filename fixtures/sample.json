@@ -1,39 +1,47 @@
 {
-  "generated_at": "2026-10-09T15:00:00Z",
-  "count": 3,
-  "jobs": [
-    {
-      "title": "Software Engineering Intern (Summer 2027)",
-      "company": "Example Robotics",
-      "location": "Austin, TX",
-      "posted_at": "2026-10-09T13:12:00Z",
-      "source": "Greenhouse",
-      "url": "https://jobbie.bot/discover/example-robotics-software-engineering-intern-summer-2027-00000000-0000-4000-8000-000000000001",
-      "salary": "$42/hr"
-    },
-    {
-      "title": "Data Science Co-op | Fall 2026",
-      "company": "Sample Health Labs",
-      "location": "Boston, MA",
-      "posted_at": "2026-10-08T20:45:00Z",
-      "source": "Lever",
-      "url": "https://jobbie.bot/discover/sample-health-labs-data-science-co-op-fall-2026-00000000-0000-4000-8000-000000000002"
-    },
-    {
-      "title": "Product Design Intern",
-      "company": "Placeholder Studio",
-      "location": "Remote, US",
-      "posted_at": "2026-10-07T09:00:00Z",
-      "source": "Ashby",
-      "url": "https://jobbie.bot/discover/placeholder-studio-product-design-intern-00000000-0000-4000-8000-000000000003"
-    },
-    {
-      "title": "Row with a non-Jobbie link is dropped",
-      "company": "Nope",
-      "location": "",
-      "posted_at": "2026-10-07T09:00:00Z",
-      "source": "Greenhouse",
-      "url": "https://example.com/jobs/1"
-    }
-  ]
+ "generated_at": "2026-10-09T15:00:00Z",
+ "count": 3,
+ "jobs": [
+  {
+   "title": "Software Engineering Intern (Summer 2027)",
+   "company": "Example Robotics",
+   "location": "Austin, TX",
+   "posted_at": "2026-10-09T13:12:00Z",
+   "source": "Greenhouse",
+   "url": "https://jobbie.bot/discover/example-robotics-software-engineering-intern-summer-2027-00000000-0000-4000-8000-000000000001",
+   "salary": "$42/hr",
+   "id": "00000000-0000-4000-8000-000000000001",
+   "apply_url": "https://job-boards.greenhouse.io/examplerobotics/jobs/4000000001"
+  },
+  {
+   "title": "Data Science Co-op | Fall 2026",
+   "company": "Sample Health Labs",
+   "location": "Boston, MA",
+   "posted_at": "2026-10-08T20:45:00Z",
+   "source": "Lever",
+   "url": "https://jobbie.bot/discover/sample-health-labs-data-science-co-op-fall-2026-00000000-0000-4000-8000-000000000002",
+   "id": "00000000-0000-4000-8000-000000000002",
+   "apply_url": "https://jobs.lever.co/samplehealth/22222222-2222-4222-8222-222222222222"
+  },
+  {
+   "title": "Product Design Intern",
+   "company": "Placeholder Studio",
+   "location": "Remote, US",
+   "posted_at": "2026-10-07T09:00:00Z",
+   "source": "Ashby",
+   "url": "https://jobbie.bot/discover/placeholder-studio-product-design-intern-00000000-0000-4000-8000-000000000003",
+   "id": "00000000-0000-4000-8000-000000000003",
+   "apply_url": "https://apply.workable.com/fixture/j/ABC123/"
+  },
+  {
+   "title": "Row with a non-Jobbie link is dropped",
+   "company": "Nope",
+   "location": "",
+   "posted_at": "2026-10-07T09:00:00Z",
+   "source": "Greenhouse",
+   "url": "https://example.com/jobs/1",
+   "id": "00000000-0000-4000-8000-000000000004",
+   "apply_url": "https://evil.example/not-jobbie"
+  }
+ ]
 }

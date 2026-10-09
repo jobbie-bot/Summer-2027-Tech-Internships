@@ -25,16 +25,21 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DEFAULT_URL = "https://api.jobbie.bot/public/internships.json"
 REPO_URL = "https://github.com/jobbie-bot/Summer-2027-Tech-Internships"
 USER_AGENT = f"jobbie-internships-readme/1.0 (+{REPO_URL})"
 JOBBIE_URL_PREFIX = "https://jobbie.bot/"
+# The Apply button: sign up with the job remembered, so it is waiting in the
+# new account's saved jobs (the app saves it once the account exists).
+APPLY_URL = "https://jobbie.bot/register?job={id}&utm_source=github&utm_campaign=internships_list"
+PUBLIC_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 TIMEOUT_SECONDS = 30
 # Bump whenever the filter or the rendered layout changes, so the next run
 # re-renders even if the feed's ETag has not moved.
-RENDER_VERSION = "4"
+RENDER_VERSION = "5"
 
 # The feed lists every US internship Jobbie can apply to; this README is the
 # tech slice of it. A title that names a technical discipline outright
@@ -116,8 +121,8 @@ one inbox, and Autopilot keeps applying while you sleep.
 - **Every link below is live.** The list is rebuilt from Jobbie's public feed every 6 hours;
   nothing is hand-edited and nothing stale stays up.
 - **Tech roles only:** software, data, ML/AI, security, hardware, IT, quant and the like.
-- **One click to apply:** the last column opens the posting on jobbie.bot, where Jobbie
-  applies for you.
+- **Apply with Jobbie:** the button in the last column creates your account with that job
+  already saved, and Jobbie applies for you.
 - Spotted a problem with a row? Open an issue and include the link.
 
 """
@@ -132,7 +137,7 @@ Want this data for your own project? The feed is public: `{url}`
 30 requests per minute per IP, please send a descriptive `User-Agent`).
 """
 
-TABLE_HEAD = "| Company | Role | Location | Posted | Apply |\n|---|---|---|---|---|\n"
+TABLE_HEAD = "| Company | Role | Location | Posted | Link | Apply with Jobbie |\n|---|---|---|---|---|:---:|\n"
 
 
 def log(msg: str) -> None:
@@ -185,6 +190,10 @@ def clean_jobs(payload: dict, tech_only: bool = True) -> list[dict]:
         # carried apply_url falls back to the Jobbie page.
         apply_url = str(job.get("apply_url", "")).strip()
         job["_job_url"] = apply_url if apply_url.startswith("https://") else url
+        # Where the Apply button goes: signup with the job remembered when the
+        # feed names the job's public id, else the job's Jobbie page.
+        job_id = str(job.get("id", "")).strip().lower()
+        job["_apply_url"] = APPLY_URL.format(id=job_id) if PUBLIC_ID.match(job_id) else url
         if tech_only and not is_tech(title):
             continue
         out.append(job)
@@ -198,16 +207,25 @@ def render(payload: dict, jobs: list[dict], feed_url: str) -> str:
         # Only a stated figure is worth a column inch; "see description" is not.
         if not any(ch.isdigit() for ch in salary):
             salary = ""
-        role = f"[{escape_cell(job['title'])}]({job['_job_url']})"
+        role = escape_cell(job["title"])
         if salary:
             role += f" · {escape_cell(salary)}"
+        host = urllib.parse.urlparse(job["_job_url"]).netloc.lower()
+        if host.startswith("www."):
+            host = host[4:]
+        apply_cell = (
+            f'<a href="{job["_apply_url"]}"><img src="assets/jobbie-mark.png" height="22" alt="Jobbie"></a>'
+            f'&nbsp;<a href="{job["_apply_url"]}"><img src="assets/apply.svg" height="26" alt="Apply"></a>'
+        )
         rows.append(
-            "| {company} | {role} | {location} | {posted} | [1-click with Jobbie]({url}) |".format(
+            "| {company} | {role} | {location} | {posted} | [{host}]({link}) | {apply} |".format(
                 company=escape_cell(job["company"]),
                 role=role,
                 location=escape_cell(job.get("location", "")) or "—",
                 posted=posted_date(job.get("posted_at", "")) or "—",
-                url=job["url"].strip(),
+                host=escape_cell(host) or "link",
+                link=job["_job_url"],
+                apply=apply_cell,
             )
         )
     refreshed = payload.get("generated_at") or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
