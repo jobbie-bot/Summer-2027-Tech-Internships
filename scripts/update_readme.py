@@ -34,7 +34,7 @@ JOBBIE_URL_PREFIX = "https://jobbie.bot/"
 TIMEOUT_SECONDS = 30
 # Bump whenever the filter or the rendered layout changes, so the next run
 # re-renders even if the feed's ETag has not moved.
-RENDER_VERSION = "2"
+RENDER_VERSION = "3"
 
 # The feed lists every US internship Jobbie can apply to; this README is the
 # tech slice of it. A title that names a technical discipline outright
@@ -85,21 +85,39 @@ def is_tech(title: str) -> bool:
         return True
     return bool(TECH_HINT.search(title)) and not NON_TECH.search(title)
 
-HEADER = """# Summer 2027 & Fall 2026 Tech Internships
+HEADER = """<p align="center">
+  <a href="https://jobbie.bot">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/jobbie-lockup-on-dark.png">
+      <img src="assets/jobbie-lockup.png" alt="Jobbie" width="170">
+    </picture>
+  </a>
+</p>
 
-An automatically refreshed list of **US tech internships and co-ops**, newest first,
-powered by [Jobbie](https://jobbie.bot).
+<h1 align="center">Summer 2027 &amp; Fall 2026 Tech Internships</h1>
 
-Jobbie is an AI job-search agent: tell it the roles you want and it finds matching
-postings, tailors your resume to each one and submits the application for you on the
-employer's own careers site (Greenhouse, Lever, Workday, Ashby, Workable and more).
-Every **Apply with Jobbie** link below opens that posting on jobbie.bot, where you can
-read the full description and have Jobbie apply.
+<p align="center">
+  An automatically refreshed list of <b>US tech internships and co-ops</b>, newest first.<br>
+  Every row links to the real posting on the employer's own careers site.
+</p>
 
-- Refreshes every 6 hours from Jobbie's public API; nothing here is hand-edited.
-- Only postings Jobbie can apply to are listed, so every link is live.
-- Tech roles only (software, data, ML, security, hardware, IT, quant, …); the feed itself
-  carries every US internship Jobbie can apply to.
+<p align="center">
+  <a href="https://jobbie.bot"><b>Apply to all of them in one click with Jobbie →</b></a>
+</p>
+
+## What is Jobbie?
+
+[Jobbie](https://jobbie.bot) is an AI job-search agent. You tell it the roles, locations
+and pay you want; it finds matching postings across Greenhouse, Lever, Workday, Ashby,
+Workable and more, tailors your resume to each one, answers the application questions
+and submits on the employer's own careers site. Interview invitations and offers land in
+one inbox, and Autopilot keeps applying while you sleep.
+
+- **Every link below is live.** The list is rebuilt from Jobbie's public feed every 6 hours;
+  nothing is hand-edited and nothing stale stays up.
+- **Tech roles only:** software, data, ML/AI, security, hardware, IT, quant and the like.
+- **One click to apply:** the last column opens the posting on jobbie.bot, where Jobbie
+  applies for you.
 - Spotted a problem with a row? Open an issue and include the link.
 
 """
@@ -107,7 +125,7 @@ read the full description and have Jobbie apply.
 FOOTER = """
 ---
 
-Last refreshed: **{refreshed}** · {count} postings · Source: [Jobbie](https://jobbie.bot)
+Last refreshed: **{refreshed}** · {count} postings · Powered by [Jobbie](https://jobbie.bot)
 
 Want this data for your own project? The feed is public: `{url}`
 (JSON, cached for 10 minutes, supports `ETag` / `If-None-Match`, rate-limited to
@@ -163,6 +181,10 @@ def clean_jobs(payload: dict, tech_only: bool = True) -> list[dict]:
         company = str(job.get("company", "")).strip()
         if not (url.startswith(JOBBIE_URL_PREFIX) and title and company):
             continue
+        # The posting itself, on the employer's ATS. A feed built before it
+        # carried apply_url falls back to the Jobbie page.
+        apply_url = str(job.get("apply_url", "")).strip()
+        job["_job_url"] = apply_url if apply_url.startswith("https://") else url
         if tech_only and not is_tech(title):
             continue
         out.append(job)
@@ -173,11 +195,11 @@ def render(payload: dict, jobs: list[dict], feed_url: str) -> str:
     rows = []
     for job in jobs:
         salary = str(job.get("salary", "")).strip()
-        role = escape_cell(job["title"])
+        role = f"[{escape_cell(job['title'])}]({job['_job_url']})"
         if salary:
             role += f" · {escape_cell(salary)}"
         rows.append(
-            "| {company} | {role} | {location} | {posted} | [Apply with Jobbie]({url}) |".format(
+            "| {company} | {role} | {location} | {posted} | [1-click with Jobbie]({url}) |".format(
                 company=escape_cell(job["company"]),
                 role=role,
                 location=escape_cell(job.get("location", "")) or "—",
