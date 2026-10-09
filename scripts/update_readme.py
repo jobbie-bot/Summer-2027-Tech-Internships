@@ -19,6 +19,7 @@ Run it against a local fixture to check the rendering without the network:
 from __future__ import annotations
 
 import argparse
+import re
 import datetime as dt
 import json
 import os
@@ -31,6 +32,54 @@ REPO_URL = "https://github.com/jobbie-bot/Summer-2027-Tech-Internships"
 USER_AGENT = f"jobbie-internships-readme/1.0 (+{REPO_URL})"
 JOBBIE_URL_PREFIX = "https://jobbie.bot/"
 TIMEOUT_SECONDS = 30
+
+# The feed lists every US internship Jobbie can apply to; this README is the
+# tech slice of it. A title that names a technical discipline outright
+# (STRONG_TECH) is tech whatever else it says; one that only hints at it
+# (TECH_HINT) is tech unless it also names a plainly non-technical field
+# ("Social Media Analytics Intern" is a marketing intern). --all lists the
+# whole feed instead.
+STRONG_TECH = re.compile(
+    r"software|engineer|developer|programm|data scien|data engineer|data analy|"
+    r"machine learning|\bml\b|\bai\b|artificial intelligence|\bnlp\b|computer vision|"
+    r"security|cyber|hardware|firmware|embedded|fpga|asic|silicon|\bsoc\b|\bcpu\b|\bgpu\b|"
+    r"risc|chip|semiconductor|quant|devops|\bsre\b|site reliability|cloud|infrastructure|"
+    r"backend|back-end|frontend|front-end|full[- ]?stack|\bios\b|android|web dev|"
+    r"information technology|information systems|network|robotic|autonom|computer|"
+    r"electrical|electronic|mechatronic|controls|signal|\brf\b|wireless|database|sql|python|java|"
+    r"test engineer|validation engineer|verification|sales engineer|technical program|\btpm\b|"
+    r"game dev|research scientist|statistic|simulation|\bgis\b",
+    re.I,
+)
+TECH_HINT = re.compile(
+    r"\bdata\b|analytics|\bbi\b|business intelligence|platform|mobile|\bux\b|\bui\b|"
+    r"product design|\bit\b|systems|technology|technical|\btech\b|modeling|\bqa\b|solutions|game",
+    re.I,
+)
+NON_TECH = re.compile(
+    r"marketing|communications|\bpr\b|public relations|brand|social media|content creat|"
+    r"clinical|nurs|pharm|medical|patient|therap|counsel|social work|behavior|"
+    r"accounting|audit|\btax\b|finance|financial|underwrit|actuar|claims?\b|"
+    r"\bhr\b|human resources|recruit|talent|people ops|payroll|"
+    r"legal|paralegal|compliance|contracts?\b|procurement|purchasing|"
+    r"sales|account manage|customer success|customer service|retail|merchandis|"
+    r"leasing|real estate|property|construction|facilities|"
+    r"supply chain|logistics|warehouse|operations|project management|program management|"
+    r"event|hospitality|culinary|food|tour|sustainability|environmental|"
+    r"teach|education|curriculum|admissions|student affairs|"
+    r"graphic design|video|photograph|journalis|editorial|copywrit|"
+    r"strategy|consult|business development|business analyst|business operations|"
+    r"skillbridge|insurance|banking|wealth|investment|equity research|investor|"
+    r"chemistry|biology|material science|\blab\b|laboratory|protein|cell line|quality technician|metrology|"
+    r"formulation|drug|genomic|hair care",
+    re.I,
+)
+
+
+def is_tech(title: str) -> bool:
+    if STRONG_TECH.search(title):
+        return True
+    return bool(TECH_HINT.search(title)) and not NON_TECH.search(title)
 
 HEADER = """# Summer 2027 & Fall 2026 Tech Internships
 
@@ -45,6 +94,8 @@ read the full description and have Jobbie apply.
 
 - Refreshes every 6 hours from Jobbie's public API; nothing here is hand-edited.
 - Only postings Jobbie can apply to are listed, so every link is live.
+- Tech roles only (software, data, ML, security, hardware, IT, quant, …); the feed itself
+  carries every US internship Jobbie can apply to.
 - Spotted a problem with a row? Open an issue and include the link.
 
 """
@@ -94,8 +145,8 @@ def posted_date(value: str) -> str:
         return ""
 
 
-def clean_jobs(payload: dict) -> list[dict]:
-    """Keep only well-formed rows that link to jobbie.bot."""
+def clean_jobs(payload: dict, tech_only: bool = True) -> list[dict]:
+    """Keep only well-formed rows that link to jobbie.bot (and, by default, are tech roles)."""
     jobs = payload.get("jobs")
     if not isinstance(jobs, list):
         raise ValueError("payload has no 'jobs' list")
@@ -107,6 +158,8 @@ def clean_jobs(payload: dict) -> list[dict]:
         title = str(job.get("title", "")).strip()
         company = str(job.get("company", "")).strip()
         if not (url.startswith(JOBBIE_URL_PREFIX) and title and company):
+            continue
+        if tech_only and not is_tech(title):
             continue
         out.append(job)
     return out
@@ -155,6 +208,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--readme", default="README.md", help="file to (re)write (default: %(default)s)")
     ap.add_argument("--etag-file", default=".cache/etag", help="where the last ETag is stored (default: %(default)s)")
     ap.add_argument("--allow-empty", action="store_true", help="write the README even when the feed lists zero jobs")
+    ap.add_argument("--all", action="store_true", help="list every internship in the feed, not only tech roles")
     args = ap.parse_args(argv)
 
     new_etag = None
@@ -179,7 +233,7 @@ def main(argv: list[str]) -> int:
         payload = json.loads(body.decode("utf-8"))
         if not isinstance(payload, dict):
             raise ValueError("payload is not a JSON object")
-        jobs = clean_jobs(payload)
+        jobs = clean_jobs(payload, tech_only=not args.all)
     except (ValueError, UnicodeDecodeError) as err:
         log(f"skip: feed body is malformed: {err}")
         return 0
