@@ -30,6 +30,10 @@ import urllib.request
 
 DEFAULT_URL = "https://api.jobbie.bot/public/internships.json"
 REPO_URL = "https://github.com/jobbie-bot/Summer-2027-Tech-Internships"
+# Images in table cells are addressed absolutely: GitHub renders the README
+# in light and dark themes, and a black mark disappears on dark, so each image
+# is a <picture> with a variant per theme.
+ASSET_URL = "https://raw.githubusercontent.com/jobbie-bot/Summer-2027-Tech-Internships/main/assets/"
 USER_AGENT = f"jobbie-internships-readme/1.0 (+{REPO_URL})"
 JOBBIE_URL_PREFIX = "https://jobbie.bot/"
 # The Apply button: sign up with the job remembered, so it is waiting in the
@@ -39,7 +43,7 @@ PUBLIC_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 TIMEOUT_SECONDS = 30
 # Bump whenever the filter or the rendered layout changes, so the next run
 # re-renders even if the feed's ETag has not moved.
-RENDER_VERSION = "5"
+RENDER_VERSION = "6"
 
 # The feed lists every US internship Jobbie can apply to; this README is the
 # tech slice of it. A title that names a technical discipline outright
@@ -210,20 +214,20 @@ def render(payload: dict, jobs: list[dict], feed_url: str) -> str:
         role = escape_cell(job["title"])
         if salary:
             role += f" · {escape_cell(salary)}"
-        host = urllib.parse.urlparse(job["_job_url"]).netloc.lower()
-        if host.startswith("www."):
-            host = host[4:]
         apply_cell = (
-            f'<a href="{job["_apply_url"]}"><img src="assets/jobbie-mark.png" height="22" alt="Jobbie"></a>'
-            f'&nbsp;<a href="{job["_apply_url"]}"><img src="assets/apply.svg" height="26" alt="Apply"></a>'
+            f'<a href="{job["_apply_url"]}"><picture>'
+            f'<source media="(prefers-color-scheme: dark)" srcset="{ASSET_URL}jobbie-mark-on-dark.png">'
+            f'<img src="{ASSET_URL}jobbie-mark.png" height="22" alt="Jobbie"></picture></a>'
+            f'&nbsp;<a href="{job["_apply_url"]}"><picture>'
+            f'<source media="(prefers-color-scheme: dark)" srcset="{ASSET_URL}apply-on-dark.svg">'
+            f'<img src="{ASSET_URL}apply.svg" height="26" alt="Apply"></picture></a>'
         )
         rows.append(
-            "| {company} | {role} | {location} | {posted} | [{host}]({link}) | {apply} |".format(
+            "| {company} | {role} | {location} | {posted} | [Job listing]({link}) | {apply} |".format(
                 company=escape_cell(job["company"]),
                 role=role,
                 location=escape_cell(job.get("location", "")) or "—",
                 posted=posted_date(job.get("posted_at", "")) or "—",
-                host=escape_cell(host) or "link",
                 link=job["_job_url"],
                 apply=apply_cell,
             )
